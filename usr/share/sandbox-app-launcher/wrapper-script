@@ -55,12 +55,26 @@ xsession_d_file_list_existing=(
   "/etc/X11/Xsession.d/25xdg-qubes-settings"
 )
 
+## nounset is OFF across both loops below, deliberately.
+##
+## These are THIRD-PARTY Xsession.d scripts, not written to run under strict
+## mode. They expand variables that are routinely absent from the sanitized
+## environment sudo hands us -- Debian ships
+## /etc/X11/Xsession.d/20qt-gnome-desktop-session-id, which reads
+## $GNOME_DESKTOP_SESSION_ID directly.
+##
+## The '|| true' below does NOT protect against that. An unbound variable under
+## 'set -u' terminates the SHELL; it is not a command failure, so it never
+## reaches the '||'. Leaving nounset on here would stop the application from
+## launching at all on any system carrying such a script -- which is the entire
+## purpose of this file.
+##
+## '|| true' is still needed, separately, for a non-zero RETURN from one of
+## them: before R-010 that was ignored.
+set +o nounset
+
 for file_name in "${xsession_d_file_list_executable[@]}" ; do
   if [ -x "${file_name}" ]; then
-    ## '|| true' for the same reason as dbus-launch below: these are
-    ## THIRD-PARTY Xsession.d scripts, not written to run under errexit, and
-    ## before R-010 a non-zero return from one was ignored. Letting one abort
-    ## this script would stop the application from launching at all.
     source "${file_name}" || true
   fi
 done
@@ -70,6 +84,8 @@ for file_name in "${xsession_d_file_list_existing[@]}" ; do
     source "${file_name}" || true
   fi
 done
+
+set -o nounset
 
 ## '|| true' because R-010 adds errexit to a file that had NO strict mode at
 ## all. dbus-launch is optional here -- the point of this script is the exec

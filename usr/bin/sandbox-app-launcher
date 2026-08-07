@@ -15,12 +15,16 @@ set -o errtrace
 shopt -s inherit_errexit
 shopt -s shift_verbose
 
-## Assigned on only ONE branch each and read unconditionally later:
-## setup_sandbox only in the 'setup' arm, so 'start', 'remove' and 'list'
-## reached the test at the bottom of the file with it unset; sal_is_run_with_root
-## only when running as root, so a NON-root run aborted instead of printing the
-## script's own error. Empty is what both expanded to before strict mode.
+## Assigned on only ONE branch each and read unconditionally later. The
+## dispatch chain at the bottom of the file tests setup_sandbox, then
+## start_program, then remove, so ANY subcommand reaches a test for a variable
+## its own arm never set: 'remove' and 'list' abort at the start_program test.
+## sal_is_run_with_root is assigned only when running as root, so a NON-root run
+## aborted instead of printing the script's own error message.
+## Empty is what all of them expanded to before strict mode.
 setup_sandbox=""
+start_program=""
+remove=""
 sal_is_run_with_root=""
 
 while :
@@ -128,6 +132,17 @@ if [ "${app_name}" = "shared" ]; then
   printf '%s\n' "ERROR: The app name cannot be 'shared'." >&2
   exit 1
 fi
+
+## Every one of these comes from the OPTIONAL per-app config sourced below and
+## is read unconditionally afterwards. An app with no config file, or with a
+## partial one, therefore aborted under nounset. Empty is both what they
+## expanded to before strict mode and the safe answer: each is compared against
+## "yes", so empty selects the restrictive branch.
+allow_dynamic_native_code_exec=""
+allow_mic=""
+allow_net=""
+allow_webcam=""
+shared_storage=""
 
 if [ -f "/etc/sandbox-app-launcher/${app_name}.conf" ]; then
   . "/etc/sandbox-app-launcher/${app_name}.conf"
@@ -273,7 +288,11 @@ setup_or_check() {
   fi
 
   ## Create the user that the sandboxed application will run as.
-  if ! getent passwd | sed -e 's/:.*//g' | grep -qw "${app_user}"; then
+  ## Exact lookup, not a pipeline. 'grep -q' exits at the first match and
+  ## closes the pipe, so getent or sed takes SIGPIPE and pipefail reports the
+  ## whole pipeline as failed DESPITE the match -- which made this branch try to
+  ## recreate a user that already exists.
+  if ! getent passwd "${app_user}" >/dev/null; then
     ## Use 'adduser' on Debian or Ubuntu systems but 'useradd' on other systems
     ## for portability.
     ## https://github.com/madaidan/sandbox-app-launcher/issues/9
@@ -430,7 +449,10 @@ remove_app() {
 
   kill_processes_inside_sandbox
 
-  if getent passwd | grep -q "${app_user}"; then
+  ## Exact lookup, for the same pipefail/SIGPIPE reason as in setup_or_check --
+  ## here a false negative SKIPPED the deletion entirely. It also stops a
+  ## substring match on an unrelated account.
+  if getent passwd "${app_user}" >/dev/null; then
     userdel --remove --force "${app_user}"
   else
     printf '%s\n' "INFO: User '${app_user}' does not exist, probably already removed earlier, OK."
