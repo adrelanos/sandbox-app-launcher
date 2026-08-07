@@ -48,6 +48,17 @@ true "$@"
 
 ## XXX: bwrap_args does not have proper whitespace support
 
+## '${bwrap_args}' below is DELIBERATELY UNQUOTED: it is a space-separated
+## string of SEPARATE bwrap arguments built by sandbox-app-launcher. Quoting
+## it, as a blanket shellcheck sweep does, passes the whole string as ONE
+## argument and bwrap rejects it -- breaking every sandboxed launch. The
+## 'XXX: bwrap_args does not have proper whitespace support' note above is
+## about exactly this.
+##
+## The directive must live HERE, not beside the expansion: a comment placed
+## BETWEEN two line-continuation lines ENDS the command, which left bwrap
+## truncated and ran '--unshare-all' as a command of its own.
+# shellcheck disable=SC2086
 bwrap \
    --ro-bind /bin /bin \
    --ro-bind /usr/bin /usr/bin \
@@ -105,5 +116,5 @@ bwrap \
    10< <(getent passwd root "${app_user}") \
    11< <(getent group root "${app_user}") \
    12< "${seccomp_filter}" \
-   "${bwrap_args}" \
+   ${bwrap_args} \
    "${wrapper_script}" "$@"

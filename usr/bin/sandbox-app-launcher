@@ -15,6 +15,14 @@ set -o errtrace
 shopt -s inherit_errexit
 shopt -s shift_verbose
 
+## Assigned on only ONE branch each and read unconditionally later:
+## setup_sandbox only in the 'setup' arm, so 'start', 'remove' and 'list'
+## reached the test at the bottom of the file with it unset; sal_is_run_with_root
+## only when running as root, so a NON-root run aborted instead of printing the
+## script's own error. Empty is what both expanded to before strict mode.
+setup_sandbox=""
+sal_is_run_with_root=""
+
 while :
 do
       ## The loop runs until the arguments are exhausted, so its last iteration
@@ -191,7 +199,12 @@ kill_processes_inside_sandbox() {
     ## pid 555555 does not exist.
     ## `ps --no-header -p 1 555555` -> exit code: 0
     ## ps still exit 0.
-    if ! ps --no-header -p "${pids}" &>/dev/null ; then
+    ## DELIBERATELY UNQUOTED: pgrep emits a NEWLINE-separated list and
+    ## 'ps -p' wants separate words. Quoted, ps rejects the whole string, the
+    ## '!' test succeeds, and the loop breaks out immediately instead of
+    ## waiting for the processes to exit.
+    # shellcheck disable=SC2086
+    if ! ps --no-header -p ${pids} &>/dev/null ; then
       break
     fi
     sleep 0.2 &
