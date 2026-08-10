@@ -423,6 +423,12 @@ run_program() {
   ## unknown security impact. Hence, file descriptors are passed in file:
   ## /usr/share/sandbox-app-launcher/bwrap-wrapper
 
+  ## Capture the wrapper exit status without letting errexit / the ERR trap
+  ## abort before cleanup: a failing sandboxed app must still trigger
+  ## kill_processes_inside_sandbox, and its status must propagate to the caller.
+  local wrapper_status
+  wrapper_status=0
+
   sudo \
     --set-home \
     --user="${app_user}" \
@@ -434,11 +440,13 @@ run_program() {
     wrapper_script="${wrapper_script}" \
     seccomp_filter="${seccomp_filter}" \
     bwrap_args="${bwrap_args_string}" \
-    /usr/share/sandbox-app-launcher/bwrap-wrapper "$@"
+    /usr/share/sandbox-app-launcher/bwrap-wrapper "$@" || wrapper_status="$?"
 
   kill_processes_inside_sandbox
 
   true "OK"
+
+  return "${wrapper_status}"
 }
 
 remove_app() {
