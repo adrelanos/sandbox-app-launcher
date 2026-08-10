@@ -473,7 +473,7 @@ if [ "${setup_sandbox}" = "1" ]; then
   setup
 elif [ "${start_program}" = "1" ]; then
   if sudo --set-home --user="${app_user}" test -d "${app_homedir}" ; then
-    run_program "${@}"
+    run_program "${@}" || exit "$?"
   else
     printf '%s\n' "ERROR: The sandbox for this program has not been set up yet. Please execute:
 
