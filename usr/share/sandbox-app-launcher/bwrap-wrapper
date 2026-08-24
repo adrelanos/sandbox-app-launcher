@@ -3,7 +3,37 @@
 ## Copyright (C) 2021 - 2025 ENCRYPTED SUPPORT LLC <adrelanos@whonix.org>
 ## See the file COPYING for copying conditions.
 
-if [ "$sandbox_app_launcher_debug" = "true" ]; then
+## style-ok: no-tmp-hardcode -- the '/tmp' paths below are bwrap arguments
+## naming paths INSIDE the sandbox namespace, not paths this script writes to.
+## '--tmpfs /tmp' is what gives the confined app a private /tmp, and the X11
+## socket has to appear at exactly /tmp/.X11-unix for the app to find it.
+## Substituting ${TMP} would point them at the HOST's directory and break the
+## confinement this file exists to build.
+
+## style note: the variables this script reads -- app_path, app_user,
+## app_homedir, main_app_dir, wrapper_script, seccomp_filter, bwrap_args and
+## the allow_* / shared_storage flags -- are set by sandbox-app-launcher in the
+## ENVIRONMENT of the 'sudo ... bwrap-wrapper' invocation. shellcheck sees no
+## assignment because there is none in this file; the contract lives in the
+## caller.
+##
+## Under nounset a missing one now ABORTS instead of expanding to empty. For a
+## confinement wrapper that is the safe direction: an unset seccomp_filter or
+## bwrap_args previously became an empty argument and bwrap ran with weaker
+## isolation than intended. Failing closed is the point.
+# shellcheck disable=SC2154
+
+set -o errexit
+set -o nounset
+set -o pipefail
+set -o errtrace
+shopt -s inherit_errexit
+shopt -s shift_verbose
+
+## Exported by sandbox-app-launcher before it invokes this script, but the
+## script is also reachable on its own -- and under nounset an unset read would
+## abort the sandbox wrapper before it could launch anything.
+if [ "${sandbox_app_launcher_debug:-}" = "true" ]; then
   set -x
 fi
 
@@ -11,13 +41,24 @@ true "####################"
 true "This script is currently being executed: $0"
 true "####################"
 true "bwrap_args:"
-true "$bwrap_args"
+true "${bwrap_args}"
 true "..."
 true "\$@"
 true "$@"
 
 ## XXX: bwrap_args does not have proper whitespace support
 
+## '${bwrap_args}' below is DELIBERATELY UNQUOTED: it is a space-separated
+## string of SEPARATE bwrap arguments built by sandbox-app-launcher. Quoting
+## it, as a blanket shellcheck sweep does, passes the whole string as ONE
+## argument and bwrap rejects it -- breaking every sandboxed launch. The
+## 'XXX: bwrap_args does not have proper whitespace support' note above is
+## about exactly this.
+##
+## The directive must live HERE, not beside the expansion: a comment placed
+## BETWEEN two line-continuation lines ENDS the command, which left bwrap
+## truncated and ran '--unshare-all' as a command of its own.
+# shellcheck disable=SC2086
 bwrap \
    --ro-bind /bin /bin \
    --ro-bind /usr/bin /usr/bin \
